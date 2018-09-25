@@ -24,6 +24,7 @@ from threading import Thread
 class ExSocket(object):
     """
     Extension of socket to handle recv and send of special data
+    其实就是包装了一下原有socket，使其方便使用，比如发送特定类型的数据,int string
     """
     def __init__(self, sock):
         self.sock = sock
@@ -63,8 +64,11 @@ class SlaveEntry(object):
         magic = slave.recvint()
         assert magic == kMagic, 'invalid magic number=%d from %s' % (magic, self.host)
         slave.sendint(kMagic)
+
+        # worker是带着rank启动的，然后回给tracker
         self.rank = slave.recvint()
         self.world_size = slave.recvint()
+        # jobid 的作用
         self.jobid = slave.recvstr()
         self.cmd = slave.recvstr()
         self.wait_accept = 0
@@ -78,6 +82,9 @@ class SlaveEntry(object):
         return -1
 
     def assign_rank(self, rank, wait_conn, tree_map, parent_map, ring_map):
+        """
+        wait_conn  已经与scheduler节点建立通信的worker
+        """
         self.rank = rank
         nnset = set(tree_map[rank])
         rprev, rnext = ring_map[rank]
@@ -87,7 +94,7 @@ class SlaveEntry(object):
         # send world size
         self.sock.sendint(len(tree_map))
         self.sock.sendint(len(nnset))
-        # send the rprev and next link
+        # send neighbors
         for r in nnset:
             self.sock.sendint(r)
         # send prev link
@@ -186,7 +193,7 @@ class RabitTracker(object):
         tree_map = {}
         parent_map = {}
         for r in range(nslave):
-            tree_map[r] = self.get_neighbor(r, nslave)
+            tree_map[r] = self.get_neighbor(r, nslave) # 当前节点的[父，左孩子， 右孩子]
             parent_map[r] = (r + 1) // 2 - 1
         return tree_map, parent_map
 
@@ -229,13 +236,16 @@ class RabitTracker(object):
         get the link map, this is a bit hacky, call for better algorithm
         to place similar nodes together
         """
-        tree_map, parent_map = self.get_tree(nslave)
-        ring_map = self.get_ring(tree_map, parent_map)
+        tree_map, parent_map = self.get_tree(nslave) # tree_map:当前节点 -> (父节点，左孩子，右孩子)
+                                                     # parent_map: 当前节点 -> 父节点
+        # ring是通过tree的结构来构建的，用的是一个递归的算法来实现
+        ring_map = self.get_ring(tree_map, parent_map) # ring_map: 当前节点 -> (环中前一个节点，环中后一个节点)
         rmap = {0 : 0}
         k = 0
         for i in range(nslave - 1):
             k = ring_map[k][1]
             rmap[k] = i + 1
+        # rmap: 相当于是给ring中的节点，从0节点开始依次进行编号
 
         ring_map_ = {}
         tree_map_ = {}
@@ -252,6 +262,8 @@ class RabitTracker(object):
         return tree_map_, parent_map_, ring_map_
 
     def accept_slaves(self, nslave):
+        # 主tracker线程的控场逻辑
+
         # set of nodes that finishs the job
         shutdown = {}
         # set of nodes that is waiting for connections
@@ -265,6 +277,7 @@ class RabitTracker(object):
 
         while len(shutdown) != nslave:
             fd, s_addr = self.sock.accept()
+            # 没接受到一个请求，都要验证身份？？
             s = SlaveEntry(fd, s_addr)
             if s.cmd == 'print':
                 msg = s.sock.recvstr()
@@ -283,6 +296,8 @@ class RabitTracker(object):
                 if s.world_size > 0:
                     nslave = s.world_size
                 tree_map, parent_map, ring_map = self.get_link_map(nslave)
+                # 从number tree->ring number -> index ring-> index tree,暂时还不太清楚转了这个大圈的目的
+                # 难道是为了构建一个ring 对应的树的关系？？？？
                 # set of nodes that is pending for getting up
                 todo_nodes = list(range(nslave))
             else:
@@ -420,6 +435,8 @@ def submit(nworker, nserver, fun_submit, hostIP='auto', pscmd=None):
         envs.update(rabit.slave_envs())
         rabit.start(nworker)
         if rabit.alive():
+           # 待tracker线程启动之后，启动相应的worker线程， worker线程执行命令， worker线程本身不负责
+           # 节点间通信的操作，节点间的通信由rabit代码自己来做，那么就得细细追究一下[rabittracker]的作用了
            fun_submit(nworker, nserver, envs) 
     else:
         pserver = PSTracker(hostIP=hostIP, cmd=pscmd, envs=envs)

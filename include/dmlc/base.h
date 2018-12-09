@@ -238,6 +238,7 @@ namespace dmlc {
  */
 template<typename T>
 inline T *BeginPtr(std::vector<T> &vec) {  // NOLINT(*)
+ // 获得vector的地址，那么vector和数组又有什么样的区别呢？？
   if (vec.size() == 0) {
     return NULL;
   } else {

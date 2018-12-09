@@ -16,11 +16,11 @@ void InputSplitBase::Init(FileSystem *filesys,
                           const bool recurse_directories) {
   this->filesys_ = filesys;
   // initialize the path
-  this->InitInputFileInfo(uri, recurse_directories);
+  this->InitInputFileInfo(uri, recurse_directories); // 一共多少个文件以及文件的大小
   file_offset_.resize(files_.size() + 1);
   file_offset_[0] = 0;
   for (size_t i = 0; i < files_.size(); ++i) {
-    file_offset_[i + 1] = file_offset_[i] + files_[i].size;
+    file_offset_[i + 1] = file_offset_[i] + files_[i].size; // 从各个文件的角度看，构成的offset
     CHECK(files_[i].size % align_bytes == 0)
         << "file do not align by " << align_bytes << " bytes";
   }
@@ -34,15 +34,15 @@ void InputSplitBase::ResetPartition(unsigned rank,
   // align the nstep to 4 bytes
   nstep = ((nstep + align_bytes_ - 1) / align_bytes_) * align_bytes_;
   offset_begin_ = std::min(nstep * rank, ntotal);
-  offset_end_ = std::min(nstep * (rank + 1), ntotal);
+  offset_end_ = std::min(nstep * (rank + 1), ntotal); // 其实是按照所有字节去进行整块的划分
   offset_curr_ = offset_begin_;
   if (offset_begin_ == offset_end_) return;
   file_ptr_ = std::upper_bound(file_offset_.begin(),
                                file_offset_.end(),
-                               offset_begin_) - file_offset_.begin() - 1;
+                               offset_begin_) - file_offset_.begin() - 1; // 指向的是包含当前字节段的第一个文件
   file_ptr_end_ = std::upper_bound(file_offset_.begin(),
                                    file_offset_.end(),
-                                   offset_end_) - file_offset_.begin() - 1;
+                                   offset_end_) - file_offset_.begin() - 1; // 指向的是包含当前字节段的最后一个文件
   if (fs_ != NULL) {
     delete fs_; fs_ = NULL;
   }
@@ -52,15 +52,15 @@ void InputSplitBase::ResetPartition(unsigned rank,
     CHECK(file_ptr_end_ < files_.size());
     fs_ = filesys_->OpenForRead(files_[file_ptr_end_].path);
     fs_->Seek(offset_end_ - file_offset_[file_ptr_end_]);
-    offset_end_ += SeekRecordBegin(fs_);
+    offset_end_ += SeekRecordBegin(fs_); // 将当前offset_end调整移动为一个完整的record结尾
     delete fs_;
   }
   fs_ = filesys_->OpenForRead(files_[file_ptr_].path);
   if (offset_begin_ != file_offset_[file_ptr_]) {
     fs_->Seek(offset_begin_ - file_offset_[file_ptr_]);
-    offset_begin_ += SeekRecordBegin(fs_);
+    offset_begin_ += SeekRecordBegin(fs_); // 将当前offset_begin调整移动为一个完整的record结尾
   }
-  this->BeforeFirst();
+  this->BeforeFirst(); // 在确定offset_begin和offset_end之后，将offset_curr_真实走到offset_begin位置
 }
 
 void InputSplitBase::BeforeFirst(void) {
@@ -175,6 +175,7 @@ void InputSplitBase::InitInputFileInfo(const std::string& uri,
 }
 
 size_t InputSplitBase::Read(void *ptr, size_t size) {
+  // 真正左read数据的地方
   if (fs_ == NULL) {
     return 0;
   }
@@ -186,7 +187,7 @@ size_t InputSplitBase::Read(void *ptr, size_t size) {
   size_t nleft = size;
   char *buf = reinterpret_cast<char*>(ptr);
   while (true) {
-    size_t n = fs_->Read(buf, nleft);
+    size_t n = fs_->Read(buf, nleft); // 这个函数暂时没有step into
     nleft -= n; buf += n;
     offset_curr_ += n;
     if (nleft == 0) break;
@@ -234,22 +235,22 @@ bool InputSplitBase::ReadChunk(void *buf, size_t *size) {
 
   const char *bptr = reinterpret_cast<const char*>(buf);
   // return the last position where a record starts
-  const char *bend = this->FindLastRecordBegin(bptr, bptr + nread);
+  const char *bend = this->FindLastRecordBegin(bptr, bptr + nread); // 找最后一个合理的record的结束位置
   *size = bend - bptr;
   overflow_.resize(nread - *size);
   if (overflow_.length() != 0) {
     std::memcpy(BeginPtr(overflow_), bend, overflow_.length());
-  }
+  } // 
   return true;
 }
 
 bool InputSplitBase::Chunk::Load(InputSplitBase *split, size_t buffer_size) {
   data.resize(buffer_size + 1);
   while (true) {
-    // leave one tail chunk
+    // leave one tail chunk 注意这里的处理细节，是读取size大小的byte，填装到data 中 vector中，现在怀疑vector可以在地址层面当数组用
     size_t size = (data.size() - 1) * sizeof(uint32_t);
     // set back to 0 for string safety
-    data.back() = 0;
+    data.back() = 0; // 此处做了个微小的处理，后续应该有解答
     if (!split->ReadChunk(BeginPtr(data), &size)) return false;
     if (size == 0) {
       data.resize(data.size() * 2);
@@ -287,7 +288,7 @@ bool InputSplitBase::ExtractNextChunk(Blob *out_chunk, Chunk *chunk) {
   if (chunk->begin == chunk->end) return false;
   out_chunk->dptr = chunk->begin;
   out_chunk->size = chunk->end - chunk->begin;
-  chunk->begin = chunk->end;
+  chunk->begin = chunk->end; // 这里做了一个chunk的begin的更新，原因是什么？？？
   return true;
 }
 }  // namespace io

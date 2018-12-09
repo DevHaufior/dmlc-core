@@ -134,6 +134,7 @@ ParseBlock(const char *begin,
   // detect indexing mode
   // heuristic adopted from sklearn.datasets.load_svmlight_file
   // If all feature id's exceed 0, then detect 1-based indexing
+  // 尝试去确定0-based or 1-based的索引方式
   if (param_.indexing_mode > 0
       || (param_.indexing_mode < 0 && !out->index.empty() && min_feat_id > 0)) {
     // convert from 1-based to 0-based indexing

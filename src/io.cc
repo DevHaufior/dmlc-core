@@ -117,15 +117,20 @@ InputSplit* InputSplit::Create(const char *uri_,
   } else {
     LOG(FATAL) << "unknown input split type " << type;
   }
+    using namespace std;
+
 #if DMLC_ENABLE_STD_THREAD
   if (spec.cache_file.length() == 0) {
+      cout<<"ThreadedInputSplit"<<endl;
     return new ThreadedInputSplit(split, batch_size);
   } else {
+          cout<<"ThreadedInputSplit"<<endl;
     return new CachedInputSplit(split, spec.cache_file.c_str());
   }
 #else
   CHECK(spec.cache_file.length() == 0)
       << "to enable cached file, compile with c++11";
+
   return split;
 #endif
 }

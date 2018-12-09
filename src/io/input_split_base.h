@@ -179,7 +179,7 @@ class InputSplitBase : public InputSplit {
   /*! \brief bytes to be aligned */
   size_t align_bytes_;
   /*! \brief internal overflow buffer */
-  std::string overflow_;
+  std::string overflow_; // overflow_的作用是什么暂时未知
   /*! \brief initialize information in files */
   void InitInputFileInfo(const std::string& uri,
                          const bool recurse_directories);

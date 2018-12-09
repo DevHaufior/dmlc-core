@@ -23,13 +23,15 @@ class LineSplitter : public InputSplitBase {
                const char *uri,
                unsigned rank,
                unsigned nsplit) {
-    this->Init(fs, uri, 1);
-    this->ResetPartition(rank, nsplit);
+    this->Init(fs, uri, 1);  // 从文件的角度看，得到了文件的offset, [0, file1size, file1sise+file2size, ...]
+    this->ResetPartition(rank, nsplit); /**
+    根据上面的文件offset结果，得到rank of nsplit那部分的offset_begin_,offset_end_，并将真实offset_curr_调整至offset_begin_
+    **/ 
   }
 
   virtual bool ExtractNextRecord(Blob *out_rec, Chunk *chunk);
  protected:
-  virtual size_t SeekRecordBegin(Stream *fi);
+  virtual size_t SeekRecordBegin(Stream *fi); 
   virtual const char*
   FindLastRecordBegin(const char *begin, const char *end);
 };

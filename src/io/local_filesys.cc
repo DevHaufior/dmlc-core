@@ -65,7 +65,7 @@ class FileStream : public SeekStream {
 };
 
 FileInfo LocalFileSystem::GetPathInfo(const URI &path) {
-  struct stat sb;
+  struct stat sb;// #include <sys/stat.h> 获取file的大小
   if (stat(path.name.c_str(), &sb) == -1) {
     int errsv = errno;
     LOG(FATAL) << "LocalFileSystem.GetPathInfo " << path.name

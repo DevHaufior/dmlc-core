@@ -30,7 +30,7 @@ class TextParserBase : public ParserImpl<IndexType, DType> {
   explicit TextParserBase(InputSplit *source,
                           int nthread)
       : bytes_read_(0), source_(source) {
-    int maxthread = std::max(omp_get_num_procs() / 2 - 4, 1);
+    int maxthread = std::max(omp_get_num_procs() / 2 - 4, 1);  // omp方面的用法
     nthread_ = std::min(maxthread, nthread);
   }
   virtual ~TextParserBase() {
